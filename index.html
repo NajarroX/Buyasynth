@@ -217,3 +217,443 @@
                 </div>
                 
                 <div class="control">
+                    <label class="control-label">VOLUMEN: <span id="vol-value">50</span>%</label>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="100" value="50" class="slider" id="vol-slider">
+                        <span class="slider-value" id="vol-display">50</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">[ FILTROS ]</div>
+                
+                <div class="control">
+                    <label class="control-label">TIPO DE FILTRO:</label>
+                    <button class="button active" data-filter="lowpass">PASA BAJOS</button>
+                    <button class="button" data-filter="highpass">PASA ALTOS</button>
+                    <button class="button" data-filter="bandpass">PASA BANDA</button>
+                </div>
+                
+                <div class="control">
+                    <label class="control-label">FRECUENCIA DE CORTE: <span id="cutoff-value">1000</span> Hz</label>
+                    <div class="slider-container">
+                        <input type="range" min="50" max="5000" value="1000" class="slider" id="cutoff-slider">
+                        <span class="slider-value" id="cutoff-display">1000</span>
+                    </div>
+                </div>
+                
+                <div class="control">
+                    <label class="control-label">RESONANCIA: <span id="res-value">1</span></label>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="1" class="slider" id="res-slider">
+                        <span class="slider-value" id="res-display">1</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">[ EFECTOS ]</div>
+                
+                <div class="control">
+                    <label class="control-label">DELAY:</label>
+                    <button class="button" id="delay-toggle">OFF</button>
+                </div>
+                
+                <div class="control">
+                    <label class="control-label">TIEMPO DE DELAY: <span id="delay-time-value">0.5</span> s</label>
+                    <div class="slider-container">
+                        <input type="range" min="0.1" max="2" step="0.1" value="0.5" class="slider" id="delay-time-slider">
+                        <span class="slider-value" id="delay-time-display">0.5</span>
+                    </div>
+                </div>
+                
+                <div class="control">
+                    <label class="control-label">FEEDBACK: <span id="delay-feedback-value">0.3</span></label>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="0.9" step="0.1" value="0.3" class="slider" id="delay-feedback-slider">
+                        <span class="slider-value" id="delay-feedback-display">0.3</span>
+                    </div>
+                </div>
+                
+                <div class="control">
+                    <label class="control-label">DISTORSIÓN:</label>
+                    <button class="button" id="distortion-toggle">OFF</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">[ TECLADO ]</div>
+            <div class="keyboard" id="keyboard">
+                <!-- Las teclas se generarán con JavaScript -->
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="ascii-art">
+   _____                 _      _        
+  / ____|               | |    | |       
+ | |     ___  _ __   ___| |_ __| |_ _ __ 
+ | |    / _ \| '_ \ / __| __/ _` | | '__|
+ | |___| (_) | | | | (__| || (_| | | |   
+  \_____\___/|_| |_|\___|\__\__,_|_|_|   
+            </div>
+            <p>UTILIZA EL TECLADO O HAZ CLIC EN LAS TECLAS PARA TOCAR</p>
+            <p class="status" id="status">SISTEMA INACTIVO - HAZ CLIC EN "INICIAR MOTOR DE AUDIO"</p>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let audioContext;
+        let oscillator;
+        let gainNode;
+        let filter;
+        let delayNode;
+        let distortionNode;
+        let feedbackGain;
+        let isPlaying = false;
+        let currentWaveType = 'sine';
+        let currentFilterType = 'lowpass';
+        let delayEnabled = false;
+        let distortionEnabled = false;
+        let audioInitialized = false;
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            createKeyboard();
+            setupEventListeners();
+            updateStatus("SISTEMA INACTIVO - HAZ CLIC EN 'INICIAR MOTOR DE AUDIO'");
+        });
+        
+        // Inicializar el contexto de audio
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Crear nodos de audio
+                oscillator = audioContext.createOscillator();
+                gainNode = audioContext.createGain();
+                filter = audioContext.createBiquadFilter();
+                delayNode = audioContext.createDelay();
+                distortionNode = audioContext.createWaveShaper();
+                feedbackGain = audioContext.createGain();
+                
+                // Configurar valores iniciales
+                oscillator.type = currentWaveType;
+                oscillator.frequency.value = 440;
+                
+                gainNode.gain.value = 0.5;
+                
+                filter.type = currentFilterType;
+                filter.frequency.value = 1000;
+                filter.Q.value = 1;
+                
+                delayNode.delayTime.value = 0.5;
+                feedbackGain.gain.value = 0.3;
+                
+                // Configurar distorsión
+                makeDistortionCurve(0);
+                
+                // Conectar nodos (sin feedback por defecto)
+                oscillator.connect(gainNode);
+                gainNode.connect(filter);
+                filter.connect(distortionNode);
+                distortionNode.connect(audioContext.destination);
+                
+                // Configurar feedback para delay
+                delayNode.connect(feedbackGain);
+                feedbackGain.connect(delayNode);
+                
+                // Iniciar oscilador (pero silenciado)
+                oscillator.start();
+                gainNode.gain.value = 0;
+                
+                audioInitialized = true;
+                updateStatus("SISTEMA INICIADO - PRESIONA UNA TECLA PARA TOCAR");
+                document.getElementById('init-button').textContent = "MOTOR DE AUDIO ACTIVO";
+                document.getElementById('init-button').style.background = "#0f0";
+                document.getElementById('init-button').style.color = "#000";
+                
+            } catch (e) {
+                console.error("Error al inicializar el audio:", e);
+                updateStatus("ERROR: EL AUDIO NO ESTÁ DISPONIBLE");
+            }
+        }
+        
+        // Crear teclado visual
+        function createKeyboard() {
+            const keyboard = document.getElementById('keyboard');
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            
+            // Crear 2 octavas
+            for (let octave = 3; octave <= 4; octave++) {
+                for (let i = 0; i < notes.length; i++) {
+                    const note = notes[i];
+                    const key = document.createElement('div');
+                    key.className = 'key';
+                    key.dataset.note = note + octave;
+                    key.textContent = note + octave;
+                    
+                    // Marcar teclas negras
+                    if (note.includes('#')) {
+                        key.style.backgroundColor = '#000';
+                        key.style.color = '#0f0';
+                        key.style.zIndex = '1';
+                        key.style.marginLeft = '-15px';
+                        key.style.marginRight = '-15px';
+                        key.style.height = '60px';
+                    }
+                    
+                    key.addEventListener('mousedown', function(e) {
+                        if (!audioInitialized) {
+                            updateStatus("ERROR: EL MOTOR DE AUDIO NO ESTÁ INICIADO");
+                            return;
+                        }
+                        playNote(e);
+                    });
+                    key.addEventListener('mouseup', stopNote);
+                    key.addEventListener('mouseleave', stopNote);
+                    
+                    keyboard.appendChild(key);
+                }
+            }
+        }
+        
+        // Configurar event listeners para controles
+        function setupEventListeners() {
+            // Botón de inicio
+            document.getElementById('init-button').addEventListener('click', function() {
+                if (!audioInitialized) {
+                    initAudio();
+                }
+            });
+            
+            // Botones de tipo de onda
+            document.querySelectorAll('[data-wave]').forEach(button => {
+                button.addEventListener('click', function() {
+                    document.querySelectorAll('[data-wave]').forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    currentWaveType = this.dataset.wave;
+                    if (audioInitialized) {
+                        oscillator.type = currentWaveType;
+                    }
+                });
+            });
+            
+            // Botones de tipo de filtro
+            document.querySelectorAll('[data-filter]').forEach(button => {
+                button.addEventListener('click', function() {
+                    document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    currentFilterType = this.dataset.filter;
+                    if (audioInitialized) {
+                        filter.type = currentFilterType;
+                    }
+                });
+            });
+            
+            // Sliders
+            document.getElementById('freq-slider').addEventListener('input', function() {
+                const value = this.value;
+                document.getElementById('freq-value').textContent = value;
+                document.getElementById('freq-display').textContent = value;
+                if (audioInitialized) {
+                    oscillator.frequency.value = value;
+                }
+            });
+            
+            document.getElementById('vol-slider').addEventListener('input', function() {
+                const value = this.value / 100;
+                document.getElementById('vol-value').textContent = Math.round(value * 100);
+                document.getElementById('vol-display').textContent = Math.round(value * 100);
+                if (audioInitialized) {
+                    gainNode.gain.value = value;
+                }
+            });
+            
+            document.getElementById('cutoff-slider').addEventListener('input', function() {
+                const value = this.value;
+                document.getElementById('cutoff-value').textContent = value;
+                document.getElementById('cutoff-display').textContent = value;
+                if (audioInitialized) {
+                    filter.frequency.value = value;
+                }
+            });
+            
+            document.getElementById('res-slider').addEventListener('input', function() {
+                const value = this.value;
+                document.getElementById('res-value').textContent = value;
+                document.getElementById('res-display').textContent = value;
+                if (audioInitialized) {
+                    filter.Q.value = value;
+                }
+            });
+            
+            // Botones de efectos
+            document.getElementById('delay-toggle').addEventListener('click', function() {
+                if (!audioInitialized) {
+                    updateStatus("ERROR: EL MOTOR DE AUDIO NO ESTÁ INICIADO");
+                    return;
+                }
+                
+                delayEnabled = !delayEnabled;
+                this.textContent = delayEnabled ? 'ON' : 'OFF';
+                this.classList.toggle('active', delayEnabled);
+                
+                if (delayEnabled) {
+                    // Conectar delay
+                    distortionNode.disconnect();
+                    distortionNode.connect(delayNode);
+                    delayNode.connect(audioContext.destination);
+                } else {
+                    // Desconectar delay
+                    delayNode.disconnect();
+                    distortionNode.disconnect();
+                    distortionNode.connect(audioContext.destination);
+                }
+            });
+            
+            document.getElementById('delay-time-slider').addEventListener('input', function() {
+                const value = parseFloat(this.value);
+                document.getElementById('delay-time-value').textContent = value;
+                document.getElementById('delay-time-display').textContent = value;
+                if (audioInitialized) {
+                    delayNode.delayTime.value = value;
+                }
+            });
+            
+            document.getElementById('delay-feedback-slider').addEventListener('input', function() {
+                const value = parseFloat(this.value);
+                document.getElementById('delay-feedback-value').textContent = value;
+                document.getElementById('delay-feedback-display').textContent = value;
+                if (audioInitialized) {
+                    feedbackGain.gain.value = value;
+                }
+            });
+            
+            document.getElementById('distortion-toggle').addEventListener('click', function() {
+                if (!audioInitialized) {
+                    updateStatus("ERROR: EL MOTOR DE AUDIO NO ESTÁ INICIADO");
+                    return;
+                }
+                
+                distortionEnabled = !distortionEnabled;
+                this.textContent = distortionEnabled ? 'ON' : 'OFF';
+                this.classList.toggle('active', distortionEnabled);
+                
+                if (distortionEnabled) {
+                    makeDistortionCurve(400);
+                } else {
+                    makeDistortionCurve(0);
+                }
+            });
+            
+            // Teclado del ordenador
+            document.addEventListener('keydown', function(e) {
+                if (!audioInitialized) return;
+                
+                const keyMap = {
+                    'a': 'C3', 'w': 'C#3', 's': 'D3', 'e': 'D#3', 'd': 'E3',
+                    'f': 'F3', 't': 'F#3', 'g': 'G3', 'y': 'G#3', 'h': 'A3',
+                    'u': 'A#3', 'j': 'B3', 'k': 'C4', 'o': 'C#4', 'l': 'D4',
+                    'p': 'D#4', ';': 'E4'
+                };
+                
+                if (keyMap[e.key]) {
+                    playNoteFromKeyboard(keyMap[e.key]);
+                }
+            });
+            
+            document.addEventListener('keyup', function(e) {
+                if (!audioInitialized) return;
+                stopNote();
+            });
+        }
+        
+        // Función para tocar una nota
+        function playNote(e) {
+            if (!audioInitialized) return;
+            
+            const note = e.target.dataset.note;
+            const frequency = getFrequencyFromNote(note);
+            
+            oscillator.frequency.value = frequency;
+            gainNode.gain.value = document.getElementById('vol-slider').value / 100;
+            
+            e.target.classList.add('active');
+            updateStatus("REPRODUCIENDO: " + note + " (" + Math.round(frequency) + " Hz)");
+        }
+        
+        // Función para tocar una nota desde el teclado
+        function playNoteFromKeyboard(note) {
+            if (!audioInitialized) return;
+            
+            const frequency = getFrequencyFromNote(note);
+            
+            oscillator.frequency.value = frequency;
+            gainNode.gain.value = document.getElementById('vol-slider').value / 100;
+            
+            // Resaltar tecla visual
+            const keyElement = document.querySelector(`.key[data-note="${note}"]`);
+            if (keyElement) {
+                keyElement.classList.add('active');
+            }
+            
+            updateStatus("REPRODUCIENDO: " + note + " (" + Math.round(frequency) + " Hz)");
+        }
+        
+        // Función para detener la nota
+        function stopNote(e) {
+            if (!audioInitialized) return;
+            
+            gainNode.gain.value = 0;
+            
+            // Quitar resaltado de todas las teclas
+            document.querySelectorAll('.key').forEach(key => {
+                key.classList.remove('active');
+            });
+            
+            updateStatus("SILENCIO");
+        }
+        
+        // Obtener frecuencia a partir del nombre de la nota
+        function getFrequencyFromNote(note) {
+            const noteMap = {
+                'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+                'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+            };
+            
+            const noteName = note.substring(0, note.length - 1);
+            const octave = parseInt(note.substring(note.length - 1));
+            
+            // Fórmula para calcular la frecuencia: f = 440 * 2^((n-49)/12)
+            const noteNumber = noteMap[noteName] + (octave - 4) * 12;
+            return 440 * Math.pow(2, (noteNumber - 9) / 12);
+        }
+        
+        // Crear curva de distorsión
+        function makeDistortionCurve(amount) {
+            if (!audioInitialized) return;
+            
+            const samples = 44100;
+            const curve = new Float32Array(samples);
+            const deg = Math.PI / 180;
+            
+            for (let i = 0; i < samples; i++) {
+                const x = (i * 2) / samples - 1;
+                curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+            }
+            
+            distortionNode.curve = curve;
+            distortionNode.oversample = '4x';
+        }
+        
+        // Actualizar mensaje de estado
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+    </script>
+</body>
+</html>
